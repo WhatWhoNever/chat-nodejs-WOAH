@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat App</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            font-family: 'Orbitron', sans-serif;
+            background-color: #0d0d0d;
+            color: #00ff99;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        #chatContainer {
+            width: 80%;
+            max-width: 800px;
+            border: 2px solid #00ff99;
+            border-radius: 10px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.85);
+            box-shadow: 0 0 20px #00ff99;
+        }
+
+        #messages {
+            list-style-type: none;
+            padding: 0;
+            max-height: 400px;
+            overflow-y: auto;
+            border-bottom: 1px solid #00ff99;
+            margin-bottom: 20px;
+        }
+
+        #messages li {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        form {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        input[type="text"],
+        input[type="file"],
+        button {
+            background: #1a1a1a;
+            border: 2px solid #00ff99;
+            color: #00ff99;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 1em;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        /* Modal Styles */
+        #imageModal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.9);
+            color: #00ff99;
+        }
+
+        #imageModalContent {
+            background-color: #1a1a1a;
+            margin: 15% auto;
+            padding: 20px;
+            border: 2px solid #00ff99;
+            width: 80%;
+            max-width: 500px;
+            text-align: center;
+            border-radius: 10px;
+        }
+
+        #imageModal img {
+            max-width: 100%;
+            height: auto;
+            margin-bottom: 20px;
+        }
+
+        #imageModal button {
+            margin: 5px;
+        }
+
+        form {
+            display: flex;
+            flex: 1 0 1;
+            margin-top: 20px;
+        }
+
+        form :nth-child(1) {
+            flex: 1;
+        }
+
+        form :nth-child(2) {
+            width: 100px;
+        }
+        
+        .online-indicator {
+            display: flex;
+            align-items: center;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+        }
+
+        .dot {
+            height: 10px;
+            width: 10px;
+            background-color: red;
+            border-radius: 50%;
+            margin-right: 10px;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        a {
+            color: cornflowerblue;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="chatContainer">
+        <div class="online-indicator">
+            <span class="dot"></span>
+            <span class="text">0 online</span>
+        </div>
+        <br>
+        <ul id="messages">
+            <li>No Messages here!!!</li>
+        </ul>
+        <form id="messageForm">
+            <input id="messageInput" autocomplete="off" placeholder="Type your message..." />
+            <button>Send</button>
+        </form>
+        <form id="uploadForm" enctype="multipart/form-data">
+            <input type="file" id="fileInput" name="file" />
+            <button type="submit">Upload</button>
+        </form>
+    </div>
+
+    <div id="imageModal">
+        <div id="imageModalContent">
+            <img id="previewImage" src="" alt="Image Preview">
+            <div>
+                <button id="confirmButton">Send</button>
+                <button id="cancelButton">Cancel</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        let ha = 0;
+        const socket = io();
+
+        const messageForm = document.getElementById('messageForm');
+        const messageInput = document.getElementById('messageInput');
+        const messages = document.getElementById('messages');
+        const fileInput = document.getElementById('fileInput');
+        const imageModal = document.getElementById('imageModal');
+        const previewImage = document.getElementById('previewImage');
+        const confirmButton = document.getElementById('confirmButton');
+        const cancelButton = document.getElementById('cancelButton');
+
+        function formatCurrentTime() {
+            const date = new Date();
+
+            const day = date.getDate();
+
+            const monthNames = [
+                "January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"
+            ];
+            const month = monthNames[date.getMonth()];
+
+            let hours = date.getHours();
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12;
+            hours = hours ? hours : 12;
+
+            const formattedTime = `${day} ${month} ${hours}:${minutes}${ampm}`;
+            return formattedTime;
+        }
+        messageForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (messageInput.value) {
+                socket.emit('message', messageInput.value);
+                messageInput.value = '';
+            }
+        });
+
+        socket.on('message', (message) => {
+            if (ha == 0) {
+                messages.innerHTML = '';
+                ha += 1;
+            }
+            const li = document.createElement('li');
+            li.textContent = formatCurrentTime() + ": " + message;
+            messages.appendChild(li);
+        });
+
+        socket.on('file', (data) => {
+            const li = document.createElement('li');
+            const link = document.createElement('a');
+            link.href = data.filePath;
+            link.textContent = data.fileName;
+            link.target = '_blank';
+            li.appendChild(link);
+            messages.appendChild(li);
+        });
+
+        socket.on('image', (image) => {
+            const li = document.createElement('li');
+            const img = document.createElement('img');
+            img.src = image;
+            img.style.maxWidth = '200px';
+            li.appendChild(img);
+            messages.appendChild(li);
+        });
+
+        uploadForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const file = fileInput.files[0];
+            if (file) {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                fetch('/upload', {
+                        method: 'POST',
+                        body: formData,
+                    }).then(response => response.text())
+                    .then(data => console.log(data))
+                    .catch(error => console.error(error));
+            }
+        });
+        fileInput.addEventListener('change', () => {
+            const file = fileInput.files[0];
+            if (file && file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    previewImage.src = reader.result;
+                    imageModal.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+        socket.on("usrCount", data => {
+            document.querySelector(".online-indicator").children[1].textContent = data+ " online";
+        });
+        confirmButton.addEventListener('click', () => {
+            socket.emit('image', previewImage.src);
+            imageModal.style.display = 'none';
+            fileInput.value = ''; 
+        });
+
+        cancelButton.addEventListener('click', () => {
+            imageModal.style.display = 'none';
+            fileInput.value = ''; 
+        });
+
+        window.addEventListener('click', (event) => {
+            if (event.target === imageModal) {
+                imageModal.style.display = 'none';
+                fileInput.value = ''; 
+            }
+        });
+    </script>
+</body>
+
+</html>
